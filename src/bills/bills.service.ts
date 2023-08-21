@@ -1,19 +1,77 @@
 import { Injectable, StreamableFile } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import * as archiver from 'archiver';
+import * as moment from 'jalali-moment';
 import { GenerateBillDto } from './dto/generate-bill.dto';
 import { createReadStream, createWriteStream, readdir, unlink } from 'node:fs';
 import { join } from 'path';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class BillsService {
+  constructor(private readonly httpService: HttpService) {}
+
   async upload(file: Express.Multer.File) {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(file.path);
-    workbook.eachSheet((worksheet) => {
-      console.log(worksheet);
+
+    const billsSheet = workbook.getWorksheet('اطلاعات صورت حساب');
+    const productsSheet = workbook.getWorksheet('اقلام');
+
+    billsSheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      const billCreationDate = moment
+        .from(row.getCell(11).value.toString(), 'fa', 'YYYY/MM/DD')
+        .valueOf();
+      const internalBillSerial = row.getCell(9).value;
+      const cashPaymentPrice = row.getCell(7).value;
+      const creditPaymentPrice = row.getCell(7).value;
+      const customerEconomicNumber = row.getCell(6).value.toString();
+
+      const header = {
+        indatim: billCreationDate,
+        inty: 'TYPE1',
+        inno: internalBillSerial,
+        setm: 'CASH',
+        cap: cashPaymentPrice,
+        insp: creditPaymentPrice,
+        inp: 'SELL',
+        ins: 'ORIGINAL',
+        tob: 'LEGAL',
+        tinb: customerEconomicNumber,
+      };
+
+      const body = [];
+
+      productsSheet.eachRow((row) => {
+        if (row.getCell(1).value !== rowNumber) return;
+
+        body.push({
+          sstid: row.getCell(2).value.toString(),
+          sstt: row.getCell(6).value,
+          mu: row.getCell(4).value,
+          am: row.getCell(3).value,
+          fee: row.getCell(5).value,
+          dis: row.getCell(7).value,
+          cop: row.getCell(8).value,
+        });
+      });
+
+      this.httpService.post(
+        'http://thirdparty.api.raahbardev.ir:8080/api/v1/invoice/submit',
+        {
+          records: [
+            {
+              values: {
+                header: header,
+                body: body,
+              },
+            },
+          ],
+        },
+      );
     });
-    console.log(file);
   }
 
   async generate(generateBillDto: GenerateBillDto): Promise<StreamableFile> {
@@ -63,7 +121,7 @@ export class BillsService {
           .slice(0, 10);
 
         billsSheet.getRow(rowNum).values = [
-          'A2799X',
+          'A16HD3',
           'نوع-یک',
           'فروش',
           'حقوقی',
@@ -117,13 +175,6 @@ export class BillsService {
     archive.finalize();
 
     const file = createReadStream(join(process.cwd(), `test.zip`));
-
-    // for (let fileNum = 1; fileNum <= filesCount; fileNum++) {
-    //   unlink(`generated/${fileNum}.xlsx`, (err) => {
-    //     if (err) throw err;
-    //     console.log(`${fileNum}.xlsx was deleted`);
-    //   });
-    // }
 
     const generatedPath = join(process.cwd(), `generated`);
     readdir(generatedPath, (err, files) => {

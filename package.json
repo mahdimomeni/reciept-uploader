@@ -20,13 +20,16 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@nestjs/axios": "^3.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/mapped-types": "*",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.1.8",
     "archiver": "^6.0.0",
+    "axios": "^1.4.0",
     "exceljs": "^4.3.0",
+    "jalali-moment": "^3.3.11",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1"
   },
