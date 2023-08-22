@@ -6,6 +6,9 @@ import { GenerateBillDto } from './dto/generate-bill.dto';
 import { createReadStream, createWriteStream, readdir, unlink } from 'node:fs';
 import { join } from 'path';
 import { HttpService } from '@nestjs/axios';
+import { GenerateAndSendBillDto } from './dto/generate-and-send-bill.dto';
+import { lastValueFrom } from 'rxjs';
+import { parse } from 'csv-parse';
 
 @Injectable()
 export class BillsService {
@@ -26,7 +29,7 @@ export class BillsService {
         .valueOf();
       const internalBillSerial = row.getCell(9).value;
       const cashPaymentPrice = row.getCell(7).value;
-      const creditPaymentPrice = row.getCell(7).value;
+      const creditPaymentPrice = row.getCell(8).value;
       const customerEconomicNumber = row.getCell(6).value.toString();
 
       const header = {
@@ -66,9 +69,16 @@ export class BillsService {
               values: {
                 header: header,
                 body: body,
+                payment: [],
               },
             },
           ],
+        },
+        {
+          headers: {
+            Authorization:
+              'Bearer 7036b0475e410ff340fb50e331b0b3ddd2dc9ba1d5de90de3e3997b1ea1c1b25',
+          },
         },
       );
     });
@@ -188,5 +198,77 @@ export class BillsService {
     });
 
     return new StreamableFile(file);
+  }
+
+  async generateAndSend(generateAndSendBillDto: GenerateAndSendBillDto) {
+    const todayDate = new Date();
+    const fifteenDaysAgoDate = new Date();
+    fifteenDaysAgoDate.setDate(fifteenDaysAgoDate.getDate() - 15);
+    const timeDiff = todayDate.getTime() - fifteenDaysAgoDate.getTime();
+
+    const requestsTotalNumber =
+      generateAndSendBillDto.number / generateAndSendBillDto.recordsPerRequest;
+
+    for (let i = 0; i < requestsTotalNumber; i++) {
+      const records = [];
+
+      for (let x = 0; x < generateAndSendBillDto.recordsPerRequest; x++) {
+        const randomTime = Math.random() * timeDiff;
+        const randomDate = new Date(
+          fifteenDaysAgoDate.getTime() + randomTime,
+        ).valueOf();
+
+        records.push({
+          values: {
+            header: {
+              indatim: randomDate,
+              inty: 'TYPE1',
+              inno: generateAndSendBillDto.billSerialStart,
+              setm: 'CASH',
+              inp: 'SELL',
+              ins: 'ORIGINAL',
+              tob: 'LEGAL',
+              tinb: '14011637397',
+            },
+            body: [
+              {
+                sstid: '2720000000050',
+                sstt: 'باقلا خشک',
+                mu: '164',
+                am: 1,
+                fee: 1,
+                dis: 0,
+              },
+            ],
+            payment: [],
+          },
+        });
+
+        generateAndSendBillDto.billSerialStart++;
+      }
+
+      await lastValueFrom(
+        this.httpService.post(
+          'http://thirdparty.api.raahbardev.ir:8080/api/v1/invoice/submit',
+          {
+            records: records,
+          },
+          {
+            headers: {
+              Authorization:
+                'Bearer 7036b0475e410ff340fb50e331b0b3ddd2dc9ba1d5de90de3e3997b1ea1c1b25',
+            },
+          },
+        ),
+      );
+    }
+  }
+
+  async revokeFromCsv(file: Express.Multer.File) {
+    createReadStream(file.path)
+      .pipe(parse({ delimiter: ',', from_line: 2 }))
+      .on('data', function (row) {
+        console.log(row);
+      });
   }
 }

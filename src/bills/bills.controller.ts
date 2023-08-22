@@ -11,6 +11,7 @@ import { BillsService } from './bills.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Express } from 'express';
 import { GenerateBillDto } from './dto/generate-bill.dto';
+import { GenerateAndSendBillDto } from './dto/generate-and-send-bill.dto';
 
 @Controller('bills')
 export class BillsController {
@@ -29,5 +30,16 @@ export class BillsController {
     @Body() generateBillDto: GenerateBillDto,
   ): Promise<StreamableFile> {
     return await this.billsService.generate(generateBillDto);
+  }
+
+  @Post('generate-and-send')
+  generateAndSend(@Body() generateAndSendBillDto: GenerateAndSendBillDto) {
+    this.billsService.generateAndSend(generateAndSendBillDto);
+  }
+
+  @Post('revoke-from-csv')
+  @UseInterceptors(FileInterceptor('file', {}))
+  revokeFromCsv(@UploadedFile() file: Express.Multer.File) {
+    this.billsService.revokeFromCsv(file);
   }
 }
